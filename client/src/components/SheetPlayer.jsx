@@ -108,14 +108,15 @@ function measureAtClick(osmd, wrapperEl, event) {
 // ─── component ────────────────────────────────────────────────────────────────
 
 export default function SheetPlayer({ fileInfo }) {
-  const wrapperRef      = useRef(null);  // position:relative outer div
-  const osmdContainerRef = useRef(null); // OSMD renders SVGs here
-  const osmdRef         = useRef(null);
-  const engineRef       = useRef(null);
-  const customPlayerRef = useRef(null);
-  const playingRef      = useRef(false);
-  const baseBpmRef      = useRef(100);
-  const measureStepsRef = useRef([]);    // measureIndex → engine step
+  const wrapperRef       = useRef(null);  // position:relative outer div
+  const osmdContainerRef = useRef(null);  // OSMD renders SVGs here
+  const sheetAreaRef     = useRef(null);  // scroll container
+  const osmdRef          = useRef(null);
+  const engineRef        = useRef(null);
+  const customPlayerRef  = useRef(null);
+  const playingRef       = useRef(false);
+  const baseBpmRef       = useRef(100);
+  const measureStepsRef  = useRef([]);    // measureIndex → engine step
 
   const [loading,  setLoading]  = useState(false);
   const [ready,    setReady]    = useState(false);
@@ -125,8 +126,8 @@ export default function SheetPlayer({ fileInfo }) {
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages,  setTotalPages]  = useState(1);
   const [highlight,   setHighlight]   = useState(null); // { x,y,w,h }
-  // Incremented after each successful OSMD render so the page-visibility
-  // effect fires immediately when a new score loads, not only when ready changes.
+  // Incremented after each successful OSMD render so the scroll-to-top
+  // effect fires immediately when a new score loads.
   const [scoreVersion, setScoreVersion] = useState(0);
 
   // ── cleanup ────────────────────────────────────────────────────────────────
@@ -149,16 +150,14 @@ export default function SheetPlayer({ fileInfo }) {
     osmdRef.current = null;
   }, []);
 
-  // ── show only current page ─────────────────────────────────────────────────
-  // Depends on scoreVersion (bumped after each OSMD render) so pages are
-  // correctly shown/hidden as soon as the score loads, not just when audio
-  // becomes ready.
+  // ── scroll to top when a new score loads ──────────────────────────────────
+  // All pages are shown simultaneously; the sheet-area provides scrolling.
+  // When a new score renders, reset scroll position to the beginning.
   useEffect(() => {
-    if (!osmdContainerRef.current) return;
-    Array.from(osmdContainerRef.current.children).forEach((child, i) => {
-      child.style.display = i === currentPage ? '' : 'none';
-    });
-  }, [currentPage, scoreVersion]);
+    if (scoreVersion > 0 && sheetAreaRef.current) {
+      sheetAreaRef.current.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  }, [scoreVersion]);
 
   // ── load score ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -215,8 +214,8 @@ export default function SheetPlayer({ fileInfo }) {
 
       // Score is rendered — dismiss the loading overlay immediately so the
       // user sees the sheet while the audio engine loads in Phase 2.
-      // Bumping scoreVersion triggers the page-visibility effect so only the
-      // correct page is shown from the start (important for multi-page scores).
+      // Bumping scoreVersion resets the scroll position to the top so the
+      // user starts at the beginning of the newly loaded score.
       applyHighlight(osmd, 0);
       setScoreVersion((v) => v + 1);
       setLoading(false);
@@ -291,6 +290,20 @@ export default function SheetPlayer({ fileInfo }) {
     if (!bounds) return;
     setCurrentPage(bounds.pageIndex);
     setHighlight({ x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h });
+
+    // Auto-scroll the sheet area so the highlighted measure stays centred in
+    // the viewport.  All pages are rendered and visible simultaneously (no
+    // hide/show), so getBoundingClientRect() always returns accurate values.
+    const container = sheetAreaRef.current;
+    if (container && bounds.w > 0 && bounds.h > 0) {
+      const containerRect = container.getBoundingClientRect();
+      const wrapperRect   = wrapperRef.current.getBoundingClientRect();
+      // Absolute scroll offset of the measure's top inside the scroll container
+      const measureScrollTop =
+        (wrapperRect.top - containerRect.top) + container.scrollTop + bounds.y;
+      const targetScroll = measureScrollTop - container.clientHeight / 2 + bounds.h / 2;
+      container.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+    }
   }
 
   // ── transport ──────────────────────────────────────────────────────────────
@@ -378,7 +391,7 @@ export default function SheetPlayer({ fileInfo }) {
       </div>
 
       <div className="sheet-player-body">
-        <div className="sheet-area">
+        <div className="sheet-area" ref={sheetAreaRef}>
           {loading && <div className="loading-overlay">Loading score…</div>}
 
           <div ref={wrapperRef} className="osmd-wrapper" onClick={handleWrapperClick}>
