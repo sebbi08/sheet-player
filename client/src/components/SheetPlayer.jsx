@@ -111,12 +111,14 @@ export default function SheetPlayer({ fileInfo }) {
   const wrapperRef       = useRef(null);  // position:relative outer div
   const osmdContainerRef = useRef(null);  // OSMD renders SVGs here
   const sheetAreaRef     = useRef(null);  // scroll container
+  const highlightRef     = useRef(null);  // the measure-highlight div
   const osmdRef          = useRef(null);
   const engineRef        = useRef(null);
   const customPlayerRef  = useRef(null);
   const playingRef       = useRef(false);
   const baseBpmRef       = useRef(100);
   const measureStepsRef  = useRef([]);    // measureIndex → engine step
+  const lastMeasureRef   = useRef(-1);    // last measure scrolled to (avoids redundant work)
 
   const [loading,  setLoading]  = useState(false);
   const [ready,    setReady]    = useState(false);
@@ -140,6 +142,7 @@ export default function SheetPlayer({ fileInfo }) {
     setHighlight(null);
     setInstruments([]);
     measureStepsRef.current = [];
+    lastMeasureRef.current  = -1;
 
     if (engineRef.current) {
       try { engineRef.current.stop(); } catch (err) { console.warn('cleanup: engine.stop() failed', err); }
@@ -158,6 +161,16 @@ export default function SheetPlayer({ fileInfo }) {
       sheetAreaRef.current.scrollTo({ top: 0, behavior: 'instant' });
     }
   }, [scoreVersion]);
+
+  // ── keep the highlighted measure centred in the viewport ─────────────────
+  // Using scrollIntoView on the actual highlight DOM element is the most
+  // reliable approach: the browser natively resolves the nearest scrollable
+  // ancestor (.sheet-area), handles absolutely-positioned and flex-laid-out
+  // elements correctly, and does not require any manual scroll math.
+  useEffect(() => {
+    if (!highlightRef.current) return;
+    highlightRef.current.scrollIntoView({ block: 'center', behavior: 'instant' });
+  }, [highlight]);
 
   // ── load score ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -252,7 +265,11 @@ export default function SheetPlayer({ fileInfo }) {
           const iter = osmdRef.current?.cursor?.Iterator;
           if (!iter) return;
           const m = iter.CurrentMeasureIndex ?? 0;
-          applyHighlight(osmdRef.current, m, { instant: true });
+          // Skip if still in the same measure — the highlight is already correct
+          // and scrollIntoView would needlessly re-center the viewport.
+          if (m === lastMeasureRef.current) return;
+          lastMeasureRef.current = m;
+          applyHighlight(osmdRef.current, m);
         });
 
         engineRef.current = engine;
@@ -285,30 +302,14 @@ export default function SheetPlayer({ fileInfo }) {
     return map;
   }
 
-  function applyHighlight(osmd, measureIndex, { instant = false } = {}) {
+  function applyHighlight(osmd, measureIndex) {
     const bounds = getMeasureBounds(osmd, wrapperRef.current, measureIndex);
     if (!bounds) return;
     setCurrentPage(bounds.pageIndex);
     setHighlight({ x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h });
-
-    // Auto-scroll the sheet area to keep the highlighted measure centred.
-    // We use wrapperRef.current.offsetTop (relative to the scroll container
-    // whose position: relative makes it the offset parent) rather than
-    // getBoundingClientRect(), which is viewport-relative and changes as the
-    // user scrolls — making the math unreliable.
-    // During playback we use instant scrolling; the ITERATION event fires
-    // many times per second and repeated smooth-scroll calls cancel each
-    // other before completing, so the view appears to not follow at all.
-    const container = sheetAreaRef.current;
-    if (container && bounds.w > 0 && bounds.h > 0) {
-      const wrapperAbsTop = wrapperRef.current.offsetTop; // px from container content-box top
-      const absoluteY = wrapperAbsTop + bounds.y;
-      const targetScroll = absoluteY - container.clientHeight / 2 + bounds.h / 2;
-      container.scrollTo({
-        top: Math.max(0, targetScroll),
-        behavior: instant ? 'instant' : 'smooth',
-      });
-    }
+    // Scrolling is handled by the useEffect that watches `highlight` changes.
+    // The highlightRef.scrollIntoView() call there is more reliable than any
+    // manual getBoundingClientRect/offsetTop math in a flex+absolute layout.
   }
 
   // ── transport ──────────────────────────────────────────────────────────────
@@ -404,6 +405,7 @@ export default function SheetPlayer({ fileInfo }) {
 
             {highlight && ready && (
               <div
+                ref={highlightRef}
                 className="measure-highlight"
                 style={{
                   left: highlight.x,
