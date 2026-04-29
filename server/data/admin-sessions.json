@@ -1,0 +1,11 @@
+{
+  "sessions": {
+    "473a6614c45e5d61d33f058c": {
+      "tokenHash": "ffd905b0b7a80b7c28046c25c9140ddc829fe6321458cd76bb1fb03d93490939",
+      "createdAt": 1777473488581,
+      "updatedAt": 1777473488581,
+      "expiresAt": 1778078288581,
+      "rememberMe": true
+    }
+  }
+}

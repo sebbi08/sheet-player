@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import PropTypes from 'prop-types';
 import { OpenSheetMusicDisplay } from 'opensheetmusicdisplay';
 import PlaybackEngine from 'osmd-audio-player';
 import { CustomPianoPlayer } from '../audioPlayer.js';
@@ -74,8 +75,9 @@ export default function SheetPlayer({ fileInfo }) {
   const [loading,  setLoading]  = useState(false);
   const [ready,    setReady]    = useState(false);
   const [playing,  setPlaying]  = useState(false);
-  const [tempo,    setTempo]    = useState(1.0);
+  const [tempo,    setTempo]    = useState(1);
   const [instruments, setInstruments] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages,  setTotalPages]  = useState(1);
   // Incremented after each successful OSMD render so the scroll-to-top
@@ -90,6 +92,7 @@ export default function SheetPlayer({ fileInfo }) {
     setCurrentPage(0);
     setTotalPages(1);
     setInstruments([]);
+    setGroups([]);
     measureStepsRef.current = [];
     lastMeasureRef.current  = -1;
 
@@ -124,7 +127,10 @@ export default function SheetPlayer({ fileInfo }) {
     try {
       // ── Phase 1: fetch + OSMD render ─────────────────────────────────────
       const xmlContent = await fetch(`/api/files/${encodeURIComponent(info.filename)}`)
-        .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); });
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.text();
+        });
       if (isCancelled()) return;
 
       const osmd = new OpenSheetMusicDisplay(osmdContainerRef.current, {
@@ -154,6 +160,20 @@ export default function SheetPlayer({ fileInfo }) {
         muted: false,
       }));
       setInstruments(instList);
+
+      try {
+        const groupsResponse = await fetch(`/api/groups/${encodeURIComponent(info.filename)}`);
+        if (groupsResponse.ok) {
+          const groupsData = await groupsResponse.json();
+          setGroups(Array.isArray(groupsData.groups) ? groupsData.groups : []);
+        } else {
+          setGroups([]);
+        }
+      } catch (groupErr) {
+        console.warn('Group fetch failed, using individual controls only.', groupErr);
+        setGroups([]);
+      }
+
       setTotalPages(osmd.GraphicSheet?.MusicPages?.length ?? 1);
 
       // Show cursor at measure 0 so the start position is visible while the
@@ -276,12 +296,62 @@ export default function SheetPlayer({ fileInfo }) {
     if (engineRef.current) engineRef.current.setBpm(baseBpmRef.current * newTempo);
   }
 
-  function handleMuteToggle(instrumentId, muted) {
+  const controlItems = useMemo(() => {
+    if (instruments.length === 0) return [];
+
+    const partIdToInstrument = new Map(
+      (fileInfo.parts || []).map((part, index) => [String(part.id || ''), instruments[index]?.id]).filter((entry) => entry[1] !== undefined),
+    );
+
+    const groupedInstrumentIds = new Set();
+    const groupedControls = [];
+
+    for (const group of groups) {
+      const memberInstrumentIds = (group.partIds || [])
+        .map((partId) => partIdToInstrument.get(String(partId)))
+        .filter((id, idx, all) => id !== undefined && all.indexOf(id) === idx);
+
+      if (memberInstrumentIds.length < 2) continue;
+      memberInstrumentIds.forEach((id) => groupedInstrumentIds.add(id));
+
+      const muted = memberInstrumentIds.every((id) => instruments.find((inst) => inst.id === id)?.muted);
+      groupedControls.push({
+        id: `group:${group.name}`,
+        name: group.name,
+        muted,
+        memberCount: memberInstrumentIds.length,
+        memberInstrumentIds,
+      });
+    }
+
+    const ungroupedControls = instruments
+      .filter((inst) => !groupedInstrumentIds.has(inst.id))
+      .map((inst) => ({
+        id: inst.id,
+        name: inst.name,
+        muted: inst.muted,
+        memberCount: 1,
+        memberInstrumentIds: [inst.id],
+      }));
+
+    return [...groupedControls, ...ungroupedControls];
+  }, [fileInfo.parts, groups, instruments]);
+
+  function applyMuteByInstrumentIds(instrumentIds, muted) {
     setInstruments((prev) => {
-      const inst = prev.find((i) => i.id === instrumentId);
-      if (inst) customPlayerRef.current?.setMuted(inst.midiId, muted);
-      return prev.map((i) => i.id === instrumentId ? { ...i, muted } : i);
+      const targetIds = new Set(instrumentIds);
+      return prev.map((inst) => {
+        if (!targetIds.has(inst.id)) return inst;
+        customPlayerRef.current?.setMuted(inst.midiId, muted);
+        return { ...inst, muted };
+      });
     });
+  }
+
+  function handleMuteToggle(controlId, muted) {
+    const control = controlItems.find((item) => item.id === controlId);
+    if (!control) return;
+    applyMuteByInstrumentIds(control.memberInstrumentIds, muted);
   }
 
   // ── click-to-jump ──────────────────────────────────────────────────────────
@@ -350,9 +420,23 @@ export default function SheetPlayer({ fileInfo }) {
             onStop={handleStop}
             onTempoChange={handleTempoChange}
           />
-          <PartSelector instruments={instruments} onMuteToggle={handleMuteToggle} />
+          <PartSelector items={controlItems} onMuteToggle={handleMuteToggle} />
         </div>
       </div>
     </div>
   );
 }
+
+SheetPlayer.propTypes = {
+  fileInfo: PropTypes.shape({
+    filename: PropTypes.string.isRequired,
+    title: PropTypes.string,
+    composer: PropTypes.string,
+    parts: PropTypes.arrayOf(
+      PropTypes.shape({
+        id: PropTypes.string,
+        name: PropTypes.string,
+      }),
+    ),
+  }).isRequired,
+};

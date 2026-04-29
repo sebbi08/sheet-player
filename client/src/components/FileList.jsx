@@ -1,19 +1,25 @@
 import { useEffect, useState } from 'react';
 
-export default function FileList({ onSelect, selected }) {
+export default function FileList({ onSelect, selected, reloadKey = 0, onFilesLoaded }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    setLoading(true);
+    setError(null);
     fetch('/api/files')
       .then((r) => {
         if (!r.ok) throw new Error(`Server error ${r.status}`);
         return r.json();
       })
-      .then((data) => { setFiles(data); setLoading(false); })
+      .then((data) => {
+        setFiles(data);
+        onFilesLoaded?.(data);
+        setLoading(false);
+      })
       .catch((e) => { setError(e.message); setLoading(false); });
-  }, []);
+  }, [reloadKey, onFilesLoaded]);
 
   if (loading) return <div className="file-list-msg">Loading…</div>;
   if (error)   return <div className="file-list-msg error">⚠ {error}</div>;
