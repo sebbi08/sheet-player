@@ -125,6 +125,9 @@ export default function SheetPlayer({ fileInfo }) {
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages,  setTotalPages]  = useState(1);
   const [highlight,   setHighlight]   = useState(null); // { x,y,w,h }
+  // Incremented after each successful OSMD render so the page-visibility
+  // effect fires immediately when a new score loads, not only when ready changes.
+  const [scoreVersion, setScoreVersion] = useState(0);
 
   // ── cleanup ────────────────────────────────────────────────────────────────
   const cleanup = useCallback(() => {
@@ -147,29 +150,38 @@ export default function SheetPlayer({ fileInfo }) {
   }, []);
 
   // ── show only current page ─────────────────────────────────────────────────
+  // Depends on scoreVersion (bumped after each OSMD render) so pages are
+  // correctly shown/hidden as soon as the score loads, not just when audio
+  // becomes ready.
   useEffect(() => {
-    if (!osmdContainerRef.current || !ready) return;
+    if (!osmdContainerRef.current) return;
     Array.from(osmdContainerRef.current.children).forEach((child, i) => {
       child.style.display = i === currentPage ? '' : 'none';
     });
-  }, [currentPage, ready]);
+  }, [currentPage, scoreVersion]);
 
   // ── load score ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!fileInfo) return;
     cleanup();
-    loadScore(fileInfo);
-    return cleanup;
+    // Guard against React StrictMode's double-invocation and rapid file
+    // switches: each loadScore call gets a `cancelled` flag.  When the
+    // effect cleanup runs (unmount or dep change) we flip it to true so
+    // any in-flight async work exits without touching state/DOM.
+    let cancelled = false;
+    loadScore(fileInfo, () => cancelled);
+    return () => { cancelled = true; cleanup(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileInfo.filename]);
 
-  async function loadScore(info) {
+  async function loadScore(info, isCancelled) {
     setLoading(true);
     try {
+      // ── Phase 1: fetch + OSMD render ─────────────────────────────────────
       const xmlContent = await fetch(`/api/files/${encodeURIComponent(info.filename)}`)
         .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); });
+      if (isCancelled()) return;
 
-      // ── OSMD ──────────────────────────────────────────────────────────────
       const osmd = new OpenSheetMusicDisplay(osmdContainerRef.current, {
         autoResize: false,
         backend: 'svg',
@@ -180,13 +192,15 @@ export default function SheetPlayer({ fileInfo }) {
         followCursor: false,
       });
       await osmd.load(xmlContent);
+      if (isCancelled()) return;
 
       // Give each instrument a unique MIDI ID (0,1,2,…) so CustomPianoPlayer
       // can mute individual parts while still playing everything as piano.
       osmd.Sheet.Instruments.forEach((inst, i) => { inst.MidiInstrumentId = i; });
 
       await osmd.render();
-      osmd.cursor.show();
+      if (isCancelled()) return;
+
       osmdRef.current = osmd;
 
       // ── part list ────────────────────────────────────────────────────────
@@ -199,38 +213,56 @@ export default function SheetPlayer({ fileInfo }) {
       setInstruments(instList);
       setTotalPages(osmd.GraphicSheet?.MusicPages?.length ?? 1);
 
-      // ── PlaybackEngine ────────────────────────────────────────────────────
-      const customPlayer = new CustomPianoPlayer();
-      customPlayerRef.current = customPlayer;
-      const engine = new PlaybackEngine(undefined, customPlayer);
-      await engine.loadScore(osmd);
-
-      // Record base BPM so tempo slider works correctly after re-loads
-      baseBpmRef.current = engine.playbackSettings.bpm;
-      engine.setBpm(baseBpmRef.current * tempo);
-
-      // Build measure→step map
-      measureStepsRef.current = buildMeasureStepMap(osmd);
-
-      // Subscribe to events
-      engine.on(PlaybackEvent.STATE_CHANGE, (state) => {
-        if (state === 'STOPPED') {
-          playingRef.current = false;
-          setPlaying(false);
-        }
-      });
-      engine.on(PlaybackEvent.ITERATION, () => {
-        const iter = osmdRef.current?.cursor?.Iterator;
-        if (!iter) return;
-        const m = iter.CurrentMeasureIndex ?? 0;
-        applyHighlight(osmdRef.current, m);
-      });
-
-      engineRef.current = engine;
+      // Score is rendered — dismiss the loading overlay immediately so the
+      // user sees the sheet while the audio engine loads in Phase 2.
+      // Bumping scoreVersion triggers the page-visibility effect so only the
+      // correct page is shown from the start (important for multi-page scores).
       applyHighlight(osmd, 0);
+      setScoreVersion((v) => v + 1);
       setLoading(false);
-      setReady(true);
+
+      // ── Phase 2: audio engine (best-effort) ───────────────────────────────
+      // Failures here are non-fatal: the score remains visible and the
+      // transport controls stay disabled until the engine is ready.
+      try {
+        const customPlayer = new CustomPianoPlayer();
+        customPlayerRef.current = customPlayer;
+        const engine = new PlaybackEngine(undefined, customPlayer);
+        await engine.loadScore(osmd);
+        if (isCancelled()) return;
+
+        // engine.loadScore() hides the cursor via countAndSetIterationSteps;
+        // restore it so the start position is visible before playback begins.
+        try { osmd.cursor.show(); } catch (_) { /* ignore */ }
+
+        // Record base BPM so tempo slider works correctly after re-loads
+        baseBpmRef.current = engine.playbackSettings.bpm;
+        engine.setBpm(baseBpmRef.current * tempo);
+
+        // Build measure→step map
+        measureStepsRef.current = buildMeasureStepMap(osmd);
+
+        // Subscribe to events
+        engine.on(PlaybackEvent.STATE_CHANGE, (state) => {
+          if (state === 'STOPPED') {
+            playingRef.current = false;
+            setPlaying(false);
+          }
+        });
+        engine.on(PlaybackEvent.ITERATION, () => {
+          const iter = osmdRef.current?.cursor?.Iterator;
+          if (!iter) return;
+          const m = iter.CurrentMeasureIndex ?? 0;
+          applyHighlight(osmdRef.current, m);
+        });
+
+        engineRef.current = engine;
+        setReady(true);
+      } catch (audioErr) {
+        console.warn('Audio engine setup failed (score shown without playback):', audioErr);
+      }
     } catch (e) {
+      if (isCancelled()) return;
       console.error('Failed to load score:', e);
       setLoading(false);
     }
