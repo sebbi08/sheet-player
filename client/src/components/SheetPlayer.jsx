@@ -118,7 +118,6 @@ export default function SheetPlayer({ fileInfo }) {
   const wrapperRef       = useRef(null);  // position:relative outer div
   const osmdContainerRef = useRef(null);  // OSMD renders SVGs here
   const sheetAreaRef     = useRef(null);  // scroll container
-  const highlightRef     = useRef(null);  // the measure-highlight div
   const osmdRef          = useRef(null);
   const engineRef        = useRef(null);
   const customPlayerRef  = useRef(null);
@@ -170,13 +169,22 @@ export default function SheetPlayer({ fileInfo }) {
   }, [scoreVersion]);
 
   // ── keep the highlighted measure centred in the viewport ─────────────────
-  // Using scrollIntoView on the actual highlight DOM element is the most
-  // reliable approach: the browser natively resolves the nearest scrollable
-  // ancestor (.sheet-area), handles absolutely-positioned and flex-laid-out
-  // elements correctly, and does not require any manual scroll math.
+  // We use direct scrollTop arithmetic instead of scrollIntoView so that this
+  // works even before the audio engine has finished loading (highlight is shown
+  // before `ready` becomes true).
+  //
+  // wrapperRef.current.offsetTop  = y of .osmd-wrapper within .sheet-area
+  //                                 (its CSS offset parent, position:relative)
+  // highlight.y                   = y of the measure relative to .osmd-wrapper
+  //                                 (scroll-independent — computed as the
+  //                                  difference of two getBoundingClientRect
+  //                                  values so viewport scroll cancels out)
   useEffect(() => {
-    if (!highlightRef.current) return;
-    highlightRef.current.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const sheetArea = sheetAreaRef.current;
+    const wrapper   = wrapperRef.current;
+    if (!highlight || !sheetArea || !wrapper) return;
+    const measureCenter = wrapper.offsetTop + highlight.y + highlight.h / 2;
+    sheetArea.scrollTop = measureCenter - sheetArea.clientHeight / 2;
   }, [highlight]);
 
   // ── load score ────────────────────────────────────────────────────────────
@@ -410,9 +418,8 @@ export default function SheetPlayer({ fileInfo }) {
           <div ref={wrapperRef} className="osmd-wrapper" onClick={handleWrapperClick}>
             <div ref={osmdContainerRef} />
 
-            {highlight && ready && (
+            {highlight && (
               <div
-                ref={highlightRef}
                 className="measure-highlight"
                 style={{
                   left: highlight.x,
