@@ -24,13 +24,17 @@ function getMeasureBounds(osmd, wrapperEl, measureIndex) {
     if (!ml?.[0]?.[measureIndex]) return null;
     const targetMeasure = ml[0][measureIndex];
 
-    // Find the page this measure lives on
+    // Find the page this measure lives on.
+    // OSMD page hierarchy: MusicPages → MusicSystems → StaffLines → Measures
+    // (GraphicalMusicPage has no direct StaffLines property)
     const pages = osmd.GraphicSheet.MusicPages;
     let pageIndex = 0;
     outer: for (let p = 0; p < pages.length; p++) {
-      for (const sl of pages[p].StaffLines) {
-        for (const gm of sl.Measures) {
-          if (gm === targetMeasure) { pageIndex = p; break outer; }
+      for (const system of (pages[p]?.MusicSystems ?? [])) {
+        for (const sl of (system?.StaffLines ?? [])) {
+          for (const gm of (sl?.Measures ?? [])) {
+            if (gm === targetMeasure) { pageIndex = p; break outer; }
+          }
         }
       }
     }
@@ -86,16 +90,19 @@ function measureAtClick(osmd, wrapperEl, event) {
       const unitX = (event.clientX - svgRect.left) / (svgRect.width  / vb.width);
       const unitY = (event.clientY - svgRect.top)  / (svgRect.height / vb.height);
 
-      for (const sl of (pages[p]?.StaffLines ?? [])) {
-        for (const gm of sl.Measures) {
-          const pos  = gm.PositionAndShape.AbsolutePosition;
-          const size = gm.PositionAndShape.Size;
-          if (
-            unitX >= pos.x && unitX <= pos.x + size.width &&
-            unitY >= pos.y - 4 && unitY <= pos.y + size.height + 4
-          ) {
-            const idx = ml[0].indexOf(gm);
-            if (idx >= 0) return idx;
+      // OSMD page hierarchy: MusicPages → MusicSystems → StaffLines → Measures
+      for (const system of (pages[p]?.MusicSystems ?? [])) {
+        for (const sl of (system?.StaffLines ?? [])) {
+          for (const gm of (sl?.Measures ?? [])) {
+            const pos  = gm.PositionAndShape.AbsolutePosition;
+            const size = gm.PositionAndShape.Size;
+            if (
+              unitX >= pos.x && unitX <= pos.x + size.width &&
+              unitY >= pos.y - 4 && unitY <= pos.y + size.height + 4
+            ) {
+              const idx = ml[0].indexOf(gm);
+              if (idx >= 0) return idx;
+            }
           }
         }
       }
