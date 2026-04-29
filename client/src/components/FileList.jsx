@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
+import PropTypes from 'prop-types';
 
-export default function FileList({ onSelect, selected }) {
+export default function FileList({ onSelect, selected, refreshToken = 0 }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    setLoading(true);
+    setError(null);
     fetch('/api/files')
       .then((r) => {
         if (!r.ok) throw new Error(`Server error ${r.status}`);
@@ -13,7 +16,7 @@ export default function FileList({ onSelect, selected }) {
       })
       .then((data) => { setFiles(data); setLoading(false); })
       .catch((e) => { setError(e.message); setLoading(false); });
-  }, []);
+  }, [refreshToken]);
 
   if (loading) return <div className="file-list-msg">Loading…</div>;
   if (error)   return <div className="file-list-msg error">⚠ {error}</div>;
@@ -29,17 +32,27 @@ export default function FileList({ onSelect, selected }) {
       <h2>Scores</h2>
       <ul>
         {files.map((file) => (
-          <li
-            key={file.filename}
-            className={`file-item${selected?.filename === file.filename ? ' selected' : ''}`}
-            onClick={() => onSelect(file)}
-          >
-            <div className="file-title">{file.title}</div>
-            {file.composer && <div className="file-composer">{file.composer}</div>}
-            <div className="file-meta">{file.partCount} part{file.partCount !== 1 ? 's' : ''}</div>
+          <li key={file.filename}>
+            <button
+              className={`file-item${selected?.filename === file.filename ? ' selected' : ''}`}
+              type="button"
+              onClick={() => onSelect(file)}
+            >
+              <div className="file-title">{file.title}</div>
+              {file.composer && <div className="file-composer">{file.composer}</div>}
+              <div className="file-meta">{file.partCount} part{file.partCount === 1 ? '' : 's'}</div>
+            </button>
           </li>
         ))}
       </ul>
     </div>
   );
 }
+
+FileList.propTypes = {
+  onSelect: PropTypes.func.isRequired,
+  selected: PropTypes.shape({
+    filename: PropTypes.string,
+  }),
+  refreshToken: PropTypes.number,
+};

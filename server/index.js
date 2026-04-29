@@ -5,11 +5,14 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
 const { XMLParser } = require('fast-xml-parser');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const MUSIC_DIR = path.join(__dirname, 'music');
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
 
 app.use(cors());
 app.use(express.json());
@@ -31,6 +34,50 @@ const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
   allowBooleanAttributes: true,
+});
+
+function sanitizeUploadFilename(originalName) {
+  const baseName = path.basename(originalName || 'upload.musicxml');
+  const normalized = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const ext = path.extname(normalized).toLowerCase();
+  const hasValidExt = ['.xml', '.musicxml', '.mxl'].includes(ext);
+  return hasValidExt ? normalized : `${normalized}.musicxml`;
+}
+
+function isAllowedMusicXmlFile(name) {
+  return /\.(xml|musicxml|mxl)$/i.test(name || '');
+}
+
+function readAdminPassword(req) {
+  return req.get('x-admin-password') || req.body?.password || '';
+}
+
+function requireAdminPassword(req, res, next) {
+  if (!ADMIN_PASSWORD) {
+    return res.status(503).json({
+      error: 'Admin interface is disabled. Set ADMIN_PASSWORD on the server.',
+    });
+  }
+
+  const provided = readAdminPassword(req);
+  if (provided !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'Invalid admin password' });
+  }
+  next();
+}
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, MUSIC_DIR),
+    filename: (_req, file, cb) => cb(null, sanitizeUploadFilename(file.originalname)),
+  }),
+  limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (!isAllowedMusicXmlFile(file.originalname)) {
+      return cb(new Error('Only .xml, .musicxml or .mxl files are allowed'));
+    }
+    cb(null, true);
+  },
 });
 
 function parseMusicXmlMetadata(filePath) {
@@ -126,6 +173,61 @@ app.get('/api/files/:filename', (req, res) => {
   res.sendFile(filePath);
 });
 
+app.post('/api/admin/verify', (req, res) => {
+  if (!ADMIN_PASSWORD) {
+    return res.status(503).json({
+      error: 'Admin interface is disabled. Set ADMIN_PASSWORD on the server.',
+    });
+  }
+
+  const provided = readAdminPassword(req);
+  if (provided !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'Invalid admin password' });
+  }
+
+  return res.json({ ok: true });
+});
+
+app.post('/api/admin/upload', requireAdminPassword, (req, res) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'File too large (max 10 MB)' });
+      }
+      return res.status(400).json({ error: err.message || 'Upload failed' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    return res.status(201).json({
+      ok: true,
+      filename: req.file.filename,
+      size: req.file.size,
+    });
+  });
+});
+
+app.delete('/api/admin/files/:filename', requireAdminPassword, (req, res) => {
+  const safe = path.basename(req.params.filename || '');
+  if (!isAllowedMusicXmlFile(safe)) {
+    return res.status(400).json({ error: 'Invalid file type' });
+  }
+
+  const filePath = path.join(MUSIC_DIR, safe);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  try {
+    fs.unlinkSync(filePath);
+    return res.json({ ok: true, filename: safe });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'Failed to delete file' });
+  }
+});
+
 // Serve the built client in production
 if (process.env.NODE_ENV === 'production') {
   const clientBuild = path.join(__dirname, '..', 'client', 'dist');
@@ -138,4 +240,7 @@ if (process.env.NODE_ENV === 'production') {
 app.listen(PORT, () => {
   console.log(`Sheet-player server  →  http://localhost:${PORT}`);
   console.log(`Music directory      →  ${MUSIC_DIR}`);
+  if (!ADMIN_PASSWORD) {
+    console.warn('Admin interface is disabled. Set ADMIN_PASSWORD to enable uploads.');
+  }
 });
