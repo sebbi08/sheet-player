@@ -2,6 +2,7 @@
 
 const express = require('express');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
 const { XMLParser } = require('fast-xml-parser');
@@ -16,6 +17,15 @@ app.use(express.json());
 if (!fs.existsSync(MUSIC_DIR)) {
   fs.mkdirSync(MUSIC_DIR, { recursive: true });
 }
+
+// Rate-limit the API to prevent abuse when the server is exposed
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 120,            // 120 requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/', apiLimiter);
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -75,7 +85,8 @@ function parseMusicXmlMetadata(filePath) {
           '',
       })),
     };
-  } catch {
+  } catch (err) {
+    console.error('Error parsing MusicXML metadata:', filePath, err);
     return {
       title: path.basename(filePath, path.extname(filePath)),
       composer: '',

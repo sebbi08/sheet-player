@@ -53,7 +53,8 @@ function getMeasureBounds(osmd, wrapperEl, measureIndex) {
       h: size.height * sy,
       pageIndex,
     };
-  } catch {
+  } catch (err) {
+    console.warn('getMeasureBounds: could not compute bounds for measure', measureIndex, err);
     return null;
   }
 }
@@ -95,7 +96,7 @@ function measureAtClick(osmd, wrapperEl, event) {
       }
       break; // clicked this page but no measure hit
     }
-  } catch { /* ignore */ }
+  } catch (err) { console.warn('measureAtClick: error detecting measure', err); }
   return -1;
 }
 
@@ -132,7 +133,7 @@ export default function SheetPlayer({ fileInfo }) {
     measureStepsRef.current = [];
 
     if (engineRef.current) {
-      try { engineRef.current.stop(); } catch { /* ignore */ }
+      try { engineRef.current.stop(); } catch (err) { console.warn('cleanup: engine.stop() failed', err); }
       engineRef.current = null;
     }
     customPlayerRef.current = null;
@@ -244,7 +245,7 @@ export default function SheetPlayer({ fileInfo }) {
         step++;
       }
       osmd.cursor.reset();
-    } catch { /* ignore */ }
+    } catch (err) { console.warn('buildMeasureStepMap: cursor walk failed', err); }
     return map;
   }
 
@@ -275,7 +276,7 @@ export default function SheetPlayer({ fileInfo }) {
     await engineRef.current.stop();
     playingRef.current = false;
     setPlaying(false);
-    try { osmdRef.current?.cursor?.reset(); osmdRef.current?.cursor?.show(); } catch { /* ignore */ }
+    try { osmdRef.current?.cursor?.reset(); osmdRef.current?.cursor?.show(); } catch (err) { console.warn('handleStop: cursor reset failed', err); }
     applyHighlight(osmdRef.current, 0);
   }
 
@@ -319,7 +320,7 @@ export default function SheetPlayer({ fileInfo }) {
         osmd.cursor.next();
         cur = osmd.cursor.Iterator.CurrentMeasureIndex ?? cur + 1;
       }
-    } catch { /* ignore */ }
+    } catch (err) { console.warn('jumpToMeasure: cursor sync failed', err); }
 
     applyHighlight(osmd, measureIndex);
 
