@@ -30,21 +30,6 @@ Open **http://localhost:5173** in your browser.
 Drop `.xml` or `.musicxml` MusicXML files into `server/music/`.  
 Three sample public-domain scores are included.
 
-## Admin interface (password protected)
-
-The sidebar includes an **Admin** section where you can upload new MusicXML files and remove existing ones.
-
-1. Set an admin password before starting the server:
-
-```bash
-export ADMIN_PASSWORD="your-strong-password"
-```
-
-2. Start the app (`npm run dev` or `npm start`).
-3. Open the **Admin** section in the sidebar, enter the password, and upload or remove `.xml`, `.musicxml`, or `.mxl` files.
-
-If `ADMIN_PASSWORD` is not set, admin endpoints are disabled.
-
 ## Production build
 
 ```bash

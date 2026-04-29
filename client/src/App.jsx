@@ -1,18 +1,9 @@
 import { useState } from 'react';
 import FileList from './components/FileList.jsx';
 import SheetPlayer from './components/SheetPlayer.jsx';
-import AdminPanel from './components/AdminPanel.jsx';
 
 export default function App() {
   const [selectedFile, setSelectedFile] = useState(null);
-  const [filesRefreshToken, setFilesRefreshToken] = useState(0);
-
-  function handleFilesChanged(changes = {}) {
-    if (changes.deletedFilename && selectedFile?.filename === changes.deletedFilename) {
-      setSelectedFile(null);
-    }
-    setFilesRefreshToken((prev) => prev + 1);
-  }
 
   return (
     <div className="app">
@@ -21,12 +12,7 @@ export default function App() {
       </header>
       <div className="app-body">
         <aside className="sidebar">
-          <FileList
-            onSelect={setSelectedFile}
-            selected={selectedFile}
-            refreshToken={filesRefreshToken}
-          />
-          <AdminPanel onFilesChanged={handleFilesChanged} />
+          <FileList onSelect={setSelectedFile} selected={selectedFile} />
         </aside>
         <main className="main-content">
           {selectedFile ? (

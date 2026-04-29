@@ -43,12 +43,9 @@ body {
 .file-list ul { list-style: none; display: flex; flex-direction: column; gap: 0.3rem; }
 
 .file-item {
-  width: 100%;
-  text-align: left;
   padding: 0.55rem 0.75rem;
   border-radius: 6px;
   cursor: pointer;
-  background: transparent;
   border: 1px solid transparent;
   transition: background 0.15s, border-color 0.15s;
 }
@@ -59,92 +56,6 @@ body {
 .file-meta { font-size: 0.72rem; color: #9ca3af; margin-top: 0.15rem; }
 .file-list-msg { color: #6b7280; font-size: 0.85rem; padding: 1rem; }
 .file-list-msg.error { color: #ef4444; }
-
-/* ── Admin panel ─────────────────────────────────────────────────── */
-.admin-panel {
-  border-top: 1px solid #dde0e7;
-  padding: 0.75rem;
-  background: #fafafa;
-}
-
-.admin-panel h2 {
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #6b7280;
-  margin-bottom: 0.6rem;
-}
-
-.admin-auth,
-.admin-upload {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-
-.admin-panel label {
-  font-size: 0.75rem;
-  color: #4b5563;
-}
-
-.admin-panel input[type='password'],
-.admin-panel input[type='file'],
-.admin-select {
-  width: 100%;
-  font-size: 0.8rem;
-}
-
-.admin-select {
-  border: 1px solid #cfd5df;
-  border-radius: 6px;
-  padding: 0.35rem 0.45rem;
-  background: #fff;
-}
-
-.admin-panel input[type='password'] {
-  border: 1px solid #cfd5df;
-  border-radius: 6px;
-  padding: 0.45rem 0.55rem;
-  background: #fff;
-}
-
-.admin-btn {
-  border: 1px solid #cfd5df;
-  background: #fff;
-  border-radius: 6px;
-  padding: 0.45rem 0.6rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.admin-btn.primary {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
-  color: #fff;
-}
-
-.admin-btn.danger {
-  background: #b91c1c;
-  border-color: #b91c1c;
-  color: #fff;
-}
-
-.admin-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.admin-status {
-  margin-top: 0.6rem;
-  font-size: 0.76rem;
-  line-height: 1.3;
-}
-
-.admin-status.info { color: #4b5563; }
-.admin-status.success { color: #166534; }
-.admin-status.error { color: #b91c1c; }
 
 /* ── Main content ────────────────────────────────────────────────── */
 .main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
