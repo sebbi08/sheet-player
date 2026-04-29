@@ -126,6 +126,12 @@ body {
   background: #fff;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   cursor: pointer;
+  /* A4 portrait at 96 DPI — must be > 0 so OSMD's SkyBottomLine calculator
+     has a real pixel width available when render() is called.  Without an
+     explicit width the element collapses to 0 because its flex-column parent
+     uses align-items:center, causing "width not > 0 in measure N" warnings
+     and a blank sheet. */
+  width: 794px;
 }
 
 .measure-highlight {
