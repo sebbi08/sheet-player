@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { OpenSheetMusicDisplay } from 'opensheetmusicdisplay';
 import PlaybackEngine from 'osmd-audio-player';
-import { PlaybackEvent } from 'osmd-audio-player/dist/PlaybackEngine';
 import { CustomPianoPlayer } from '../audioPlayer.js';
 import PartSelector from './PartSelector.jsx';
 import PlayerControls from './PlayerControls.jsx';
+
+// PlaybackEngine event name constants (not re-exported by osmd-audio-player index)
+const PlaybackEvent = {
+  STATE_CHANGE: 'state-change',
+  ITERATION: 'iteration',
+};
 
 // ─── geometry helpers ─────────────────────────────────────────────────────────
 
