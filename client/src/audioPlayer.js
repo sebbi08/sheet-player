@@ -62,15 +62,19 @@ export class CustomPianoPlayer {
   /**
    * Schedule an array of notes for a future AudioContext time.
    * Notes have the shape { note, gain, duration, articulation } as defined by
-   * NotePlaybackInstruction. soundfont-player accepts the `note` property
-   * directly, so we pass them through without remapping.
+   * NotePlaybackInstruction. We map `note` → `midi` explicitly since
+   * soundfont-player's schedule reads `o.midi` (among other aliases) and
+   * using an explicit numeric property avoids falsy-zero edge cases.
    * @param {number} midiId
    * @param {number} time  AudioContext time in seconds
    * @param {import('osmd-audio-player/dist/players/NotePlaybackOptions').NotePlaybackInstruction[]} notes
    */
   schedule(midiId, time, notes) {
     if (this._mutedIds.has(midiId) || !this._piano) return;
-    this._piano.schedule(time, notes);
+    this._piano.schedule(
+      time,
+      notes.map((n) => ({ midi: n.note, gain: n.gain, duration: n.duration }))
+    );
   }
 
   /** Play a single note immediately (required by interface) */
