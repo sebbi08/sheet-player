@@ -14,61 +14,6 @@ const PlaybackEvent = {
 // ─── geometry helpers ─────────────────────────────────────────────────────────
 
 /**
- * Return pixel bounds of measure `measureIndex` (first staff row) relative
- * to `wrapperEl`, plus the page index it lives on.
- * Returns null when the measure cannot be found.
- */
-function getMeasureBounds(osmd, wrapperEl, measureIndex) {
-  try {
-    const ml = osmd.GraphicSheet?.MeasureList;
-    if (!ml?.[0]?.[measureIndex]) return null;
-    const targetMeasure = ml[0][measureIndex];
-
-    // Find the page this measure lives on.
-    // OSMD page hierarchy: MusicPages → MusicSystems → StaffLines → Measures
-    // (GraphicalMusicPage has no direct StaffLines property)
-    const pages = osmd.GraphicSheet.MusicPages;
-    let pageIndex = 0;
-    outer: for (let p = 0; p < pages.length; p++) {
-      for (const system of (pages[p]?.MusicSystems ?? [])) {
-        for (const sl of (system?.StaffLines ?? [])) {
-          for (const gm of (sl?.Measures ?? [])) {
-            if (gm === targetMeasure) { pageIndex = p; break outer; }
-          }
-        }
-      }
-    }
-
-    // SVGs: one per page, rendered as children of the OSMD container
-    const svgs = wrapperEl.querySelectorAll('svg');
-    const svgEl = svgs[pageIndex];
-    if (!svgEl) return null;
-
-    const vb = svgEl.viewBox.baseVal;
-    if (!vb || vb.width === 0) return null;
-
-    const svgRect = svgEl.getBoundingClientRect();
-    const wrapperRect = wrapperEl.getBoundingClientRect();
-    const sx = svgRect.width / vb.width;
-    const sy = svgRect.height / vb.height;
-
-    const pos = targetMeasure.PositionAndShape.AbsolutePosition;
-    const size = targetMeasure.PositionAndShape.Size;
-
-    return {
-      x: svgRect.left - wrapperRect.left + pos.x * sx,
-      y: svgRect.top  - wrapperRect.top  + pos.y * sy,
-      w: size.width  * sx,
-      h: size.height * sy,
-      pageIndex,
-    };
-  } catch (err) {
-    console.warn('getMeasureBounds: could not compute bounds for measure', measureIndex, err);
-    return null;
-  }
-}
-
-/**
  * Given a mouse click on wrapperEl, return which measure was clicked or -1.
  */
 function measureAtClick(osmd, wrapperEl, event) {
@@ -133,7 +78,6 @@ export default function SheetPlayer({ fileInfo }) {
   const [instruments, setInstruments] = useState([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages,  setTotalPages]  = useState(1);
-  const [highlight,   setHighlight]   = useState(null); // { x,y,w,h }
   // Incremented after each successful OSMD render so the scroll-to-top
   // effect fires immediately when a new score loads.
   const [scoreVersion, setScoreVersion] = useState(0);
@@ -145,7 +89,6 @@ export default function SheetPlayer({ fileInfo }) {
     setReady(false);
     setCurrentPage(0);
     setTotalPages(1);
-    setHighlight(null);
     setInstruments([]);
     measureStepsRef.current = [];
     lastMeasureRef.current  = -1;
@@ -160,41 +103,16 @@ export default function SheetPlayer({ fileInfo }) {
   }, []);
 
   // ── scroll to top when a new score loads ──────────────────────────────────
-  // All pages are shown simultaneously; the sheet-area provides scrolling.
-  // When a new score renders, reset scroll position to the beginning.
   useEffect(() => {
     if (scoreVersion > 0 && sheetAreaRef.current) {
       sheetAreaRef.current.scrollTo({ top: 0, behavior: 'instant' });
     }
   }, [scoreVersion]);
 
-  // ── keep the highlighted measure centred in the viewport ─────────────────
-  // We use direct scrollTop arithmetic instead of scrollIntoView so that this
-  // works even before the audio engine has finished loading (highlight is shown
-  // before `ready` becomes true).
-  //
-  // wrapperRef.current.offsetTop  = y of .osmd-wrapper within .sheet-area
-  //                                 (its CSS offset parent, position:relative)
-  // highlight.y                   = y of the measure relative to .osmd-wrapper
-  //                                 (scroll-independent — computed as the
-  //                                  difference of two getBoundingClientRect
-  //                                  values so viewport scroll cancels out)
-  useEffect(() => {
-    const sheetArea = sheetAreaRef.current;
-    const wrapper   = wrapperRef.current;
-    if (!highlight || !sheetArea || !wrapper) return;
-    const measureCenter = wrapper.offsetTop + highlight.y + highlight.h / 2;
-    sheetArea.scrollTop = measureCenter - sheetArea.clientHeight / 2;
-  }, [highlight]);
-
   // ── load score ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!fileInfo) return;
     cleanup();
-    // Guard against React StrictMode's double-invocation and rapid file
-    // switches: each loadScore call gets a `cancelled` flag.  When the
-    // effect cleanup runs (unmount or dep change) we flip it to true so
-    // any in-flight async work exits without touching state/DOM.
     let cancelled = false;
     loadScore(fileInfo, () => cancelled);
     return () => { cancelled = true; cleanup(); };
@@ -221,8 +139,6 @@ export default function SheetPlayer({ fileInfo }) {
       await osmd.load(xmlContent);
       if (isCancelled()) return;
 
-      // Give each instrument a unique MIDI ID (0,1,2,…) so CustomPianoPlayer
-      // can mute individual parts while still playing everything as piano.
       osmd.Sheet.Instruments.forEach((inst, i) => { inst.MidiInstrumentId = i; });
 
       await osmd.render();
@@ -240,17 +156,14 @@ export default function SheetPlayer({ fileInfo }) {
       setInstruments(instList);
       setTotalPages(osmd.GraphicSheet?.MusicPages?.length ?? 1);
 
-      // Score is rendered — dismiss the loading overlay immediately so the
-      // user sees the sheet while the audio engine loads in Phase 2.
-      // Bumping scoreVersion resets the scroll position to the top so the
-      // user starts at the beginning of the newly loaded score.
+      // Show cursor at measure 0 so the start position is visible while the
+      // audio engine loads in Phase 2.
+      try { osmd.cursor.reset(); osmd.cursor.show(); } catch (_) { /* ignore */ }
       applyHighlight(osmd, 0);
       setScoreVersion((v) => v + 1);
       setLoading(false);
 
       // ── Phase 2: audio engine (best-effort) ───────────────────────────────
-      // Failures here are non-fatal: the score remains visible and the
-      // transport controls stay disabled until the engine is ready.
       try {
         const customPlayer = new CustomPianoPlayer();
         customPlayerRef.current = customPlayer;
@@ -262,14 +175,11 @@ export default function SheetPlayer({ fileInfo }) {
         // restore it so the start position is visible before playback begins.
         try { osmd.cursor.show(); } catch (_) { /* ignore */ }
 
-        // Record base BPM so tempo slider works correctly after re-loads
         baseBpmRef.current = engine.playbackSettings.bpm;
         engine.setBpm(baseBpmRef.current * tempo);
 
-        // Build measure→step map
         measureStepsRef.current = buildMeasureStepMap(osmd);
 
-        // Subscribe to events
         engine.on(PlaybackEvent.STATE_CHANGE, (state) => {
           if (state === 'STOPPED') {
             playingRef.current = false;
@@ -280,8 +190,6 @@ export default function SheetPlayer({ fileInfo }) {
           const iter = osmdRef.current?.cursor?.Iterator;
           if (!iter) return;
           const m = iter.CurrentMeasureIndex ?? 0;
-          // Skip if still in the same measure — the highlight is already correct
-          // and scrollIntoView would needlessly re-center the viewport.
           if (m === lastMeasureRef.current) return;
           lastMeasureRef.current = m;
           applyHighlight(osmdRef.current, m);
@@ -318,13 +226,25 @@ export default function SheetPlayer({ fileInfo }) {
   }
 
   function applyHighlight(osmd, measureIndex) {
-    const bounds = getMeasureBounds(osmd, wrapperRef.current, measureIndex);
-    if (!bounds) return;
-    setCurrentPage(bounds.pageIndex);
-    setHighlight({ x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h });
-    // Scrolling is handled by the useEffect that watches `highlight` changes.
-    // The highlightRef.scrollIntoView() call there is more reliable than any
-    // manual getBoundingClientRect/offsetTop math in a flex+absolute layout.
+    // Update page indicator
+    const ml    = osmd.GraphicSheet?.MeasureList;
+    const pages = osmd.GraphicSheet?.MusicPages;
+    if (ml?.[0]?.[measureIndex] && pages) {
+      const target = ml[0][measureIndex];
+      outer: for (let p = 0; p < pages.length; p++) {
+        for (const sys of (pages[p]?.MusicSystems ?? [])) {
+          for (const sl of (sys?.StaffLines ?? [])) {
+            for (const gm of (sl?.Measures ?? [])) {
+              if (gm === target) { setCurrentPage(p); break outer; }
+            }
+          }
+        }
+      }
+    }
+    // Scroll OSMD cursor element into view
+    try {
+      osmd.cursor.cursorElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    } catch (_) { /* ignore */ }
   }
 
   // ── transport ──────────────────────────────────────────────────────────────
@@ -417,20 +337,6 @@ export default function SheetPlayer({ fileInfo }) {
 
           <div ref={wrapperRef} className="osmd-wrapper" onClick={handleWrapperClick}>
             <div ref={osmdContainerRef} />
-
-            {highlight && (
-              <div
-                className="measure-highlight"
-                style={{
-                  left: highlight.x,
-                  top:  highlight.y,
-                  width:  highlight.w,
-                  height: highlight.h,
-                  backgroundColor: 'rgba(255,200,0,0.25)',
-                  border: '2px solid rgba(255,160,0,0.7)',
-                }}
-              />
-            )}
           </div>
         </div>
 

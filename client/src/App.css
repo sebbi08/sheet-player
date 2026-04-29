@@ -134,13 +134,6 @@ body {
   width: 794px;
 }
 
-.measure-highlight {
-  position: absolute;
-  pointer-events: none;
-  z-index: 10;
-  border-radius: 3px;
-  transition: left 0.08s, top 0.08s, width 0.08s, height 0.08s;
-}
 
 /* ── Right-panel controls ────────────────────────────────────────── */
 .controls-panel {
