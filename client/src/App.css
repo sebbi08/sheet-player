@@ -1,0 +1,214 @@
+/* ── Reset & base ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #f0f2f5;
+  color: #1a1a2e;
+}
+
+/* ── App shell ───────────────────────────────────────────────────── */
+.app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+.app-header {
+  background: #1a1a2e;
+  color: #fff;
+  padding: 0.6rem 1.2rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.app-header h1 { font-size: 1.2rem; font-weight: 600; }
+
+.app-body { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ─────────────────────────────────────────────────────── */
+.sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  background: #fff;
+  border-right: 1px solid #dde0e7;
+  overflow-y: auto;
+}
+
+.file-list { padding: 0.75rem; }
+.file-list h2 {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b7280;
+  margin-bottom: 0.6rem;
+}
+.file-list ul { list-style: none; display: flex; flex-direction: column; gap: 0.3rem; }
+
+.file-item {
+  padding: 0.55rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+.file-item:hover { background: #f3f4f6; }
+.file-item.selected { background: #eff6ff; border-color: #3b82f6; }
+.file-title { font-weight: 600; font-size: 0.85rem; }
+.file-composer { font-size: 0.78rem; color: #6b7280; margin-top: 0.1rem; }
+.file-meta { font-size: 0.72rem; color: #9ca3af; margin-top: 0.15rem; }
+.file-list-msg { color: #6b7280; font-size: 0.85rem; padding: 1rem; }
+.file-list-msg.error { color: #ef4444; }
+
+/* ── Main content ────────────────────────────────────────────────── */
+.main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+.placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  gap: 0.75rem;
+}
+.placeholder-icon { font-size: 3rem; }
+.placeholder p { font-size: 1rem; }
+
+/* ── Sheet Player ────────────────────────────────────────────────── */
+.sheet-player { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+
+.sheet-player-header {
+  background: #fff;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid #dde0e7;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.sheet-player-header h2 { font-size: 1rem; font-weight: 700; }
+.sheet-player-header .composer { font-size: 0.85rem; color: #6b7280; }
+.sheet-player-header .page-indicator {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 0.2rem 0.6rem;
+  border-radius: 99px;
+}
+
+.sheet-player-body { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sheet area ──────────────────────────────────────────────────── */
+.sheet-area {
+  flex: 1;
+  overflow: auto;
+  background: #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem;
+  position: relative;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  color: #4b5563;
+  z-index: 100;
+}
+
+.osmd-wrapper {
+  position: relative;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  cursor: pointer;
+  /* A4 portrait at 96 DPI — must be > 0 so OSMD's SkyBottomLine calculator
+     has a real pixel width available when render() is called.  Without an
+     explicit width the element collapses to 0 because its flex-column parent
+     uses align-items:center, causing "width not > 0 in measure N" warnings
+     and a blank sheet. */
+  width: 794px;
+}
+
+
+/* ── Right-panel controls ────────────────────────────────────────── */
+.controls-panel {
+  width: 220px;
+  flex-shrink: 0;
+  background: #fff;
+  border-left: 1px solid #dde0e7;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* ── Player controls ─────────────────────────────────────────────── */
+.player-controls {
+  padding: 0.75rem;
+  border-bottom: 1px solid #dde0e7;
+}
+.player-controls h3 {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b7280;
+  margin-bottom: 0.6rem;
+}
+
+.btn-row { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+
+.btn {
+  flex: 1;
+  padding: 0.45rem 0.4rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.15s, opacity 0.15s;
+}
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-play  { background: #22c55e; color: #fff; }
+.btn-play:hover:not(:disabled)  { background: #16a34a; }
+.btn-pause { background: #f59e0b; color: #fff; }
+.btn-pause:hover:not(:disabled) { background: #d97706; }
+.btn-stop  { background: #ef4444; color: #fff; }
+.btn-stop:hover:not(:disabled)  { background: #dc2626; }
+
+.tempo-row { display: flex; flex-direction: column; gap: 0.3rem; }
+.tempo-row label {
+  font-size: 0.78rem;
+  color: #374151;
+  display: flex;
+  justify-content: space-between;
+}
+.tempo-row input[type=range] { width: 100%; accent-color: #3b82f6; }
+
+/* ── Part selector ───────────────────────────────────────────────── */
+.part-selector { padding: 0.75rem; }
+.part-selector h3 {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b7280;
+  margin-bottom: 0.6rem;
+}
+.part-selector ul { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
+.part-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.83rem;
+  cursor: pointer;
+  padding: 0.3rem 0.4rem;
+  border-radius: 5px;
+}
+.part-item:hover { background: #f3f4f6; }
+.part-item input[type=checkbox] { accent-color: #3b82f6; width: 15px; height: 15px; cursor: pointer; }
+.part-item.muted { color: #9ca3af; }
