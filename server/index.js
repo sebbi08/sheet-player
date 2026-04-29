@@ -130,7 +130,7 @@ app.get('/api/files/:filename', (req, res) => {
 if (process.env.NODE_ENV === 'production') {
   const clientBuild = path.join(__dirname, '..', 'client', 'dist');
   app.use(express.static(clientBuild));
-  app.get('*', (_req, res) => {
+  app.get('*', apiLimiter, (_req, res) => {
     res.sendFile(path.join(clientBuild, 'index.html'));
   });
 }

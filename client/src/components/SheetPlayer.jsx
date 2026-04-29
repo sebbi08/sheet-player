@@ -286,11 +286,11 @@ export default function SheetPlayer({ fileInfo }) {
   }
 
   function handleMuteToggle(instrumentId, muted) {
-    setInstruments((prev) =>
-      prev.map((inst) => inst.id === instrumentId ? { ...inst, muted } : inst)
-    );
-    const inst = instruments.find((i) => i.id === instrumentId);
-    if (inst) customPlayerRef.current?.setMuted(inst.midiId, muted);
+    setInstruments((prev) => {
+      const inst = prev.find((i) => i.id === instrumentId);
+      if (inst) customPlayerRef.current?.setMuted(inst.midiId, muted);
+      return prev.map((i) => i.id === instrumentId ? { ...i, muted } : i);
+    });
   }
 
   // ── click-to-jump ──────────────────────────────────────────────────────────
