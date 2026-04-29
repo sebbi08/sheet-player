@@ -252,7 +252,7 @@ export default function SheetPlayer({ fileInfo }) {
           const iter = osmdRef.current?.cursor?.Iterator;
           if (!iter) return;
           const m = iter.CurrentMeasureIndex ?? 0;
-          applyHighlight(osmdRef.current, m);
+          applyHighlight(osmdRef.current, m, { instant: true });
         });
 
         engineRef.current = engine;
@@ -285,24 +285,29 @@ export default function SheetPlayer({ fileInfo }) {
     return map;
   }
 
-  function applyHighlight(osmd, measureIndex) {
+  function applyHighlight(osmd, measureIndex, { instant = false } = {}) {
     const bounds = getMeasureBounds(osmd, wrapperRef.current, measureIndex);
     if (!bounds) return;
     setCurrentPage(bounds.pageIndex);
     setHighlight({ x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h });
 
-    // Auto-scroll the sheet area so the highlighted measure stays centred in
-    // the viewport.  All pages are rendered and visible simultaneously (no
-    // hide/show), so getBoundingClientRect() always returns accurate values.
+    // Auto-scroll the sheet area to keep the highlighted measure centred.
+    // We use wrapperRef.current.offsetTop (relative to the scroll container
+    // whose position: relative makes it the offset parent) rather than
+    // getBoundingClientRect(), which is viewport-relative and changes as the
+    // user scrolls — making the math unreliable.
+    // During playback we use instant scrolling; the ITERATION event fires
+    // many times per second and repeated smooth-scroll calls cancel each
+    // other before completing, so the view appears to not follow at all.
     const container = sheetAreaRef.current;
     if (container && bounds.w > 0 && bounds.h > 0) {
-      const containerRect = container.getBoundingClientRect();
-      const wrapperRect   = wrapperRef.current.getBoundingClientRect();
-      // Absolute scroll offset of the measure's top inside the scroll container
-      const measureScrollTop =
-        (wrapperRect.top - containerRect.top) + container.scrollTop + bounds.y;
-      const targetScroll = measureScrollTop - container.clientHeight / 2 + bounds.h / 2;
-      container.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+      const wrapperAbsTop = wrapperRef.current.offsetTop; // px from container content-box top
+      const absoluteY = wrapperAbsTop + bounds.y;
+      const targetScroll = absoluteY - container.clientHeight / 2 + bounds.h / 2;
+      container.scrollTo({
+        top: Math.max(0, targetScroll),
+        behavior: instant ? 'instant' : 'smooth',
+      });
     }
   }
 
