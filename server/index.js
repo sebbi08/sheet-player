@@ -358,36 +358,47 @@ app.post('/api/admin/logout', requireAdmin, (req, res) => {
   return res.json({ ok: true });
 });
 
-app.post('/api/admin/files', requireAdmin, upload.single('file'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded or unsupported file extension' });
+app.post('/api/admin/files', requireAdmin, upload.array('files', 10), (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: 'No files uploaded or unsupported file extension' });
   }
 
-  const filename = safeBasename(req.file.originalname);
-  if (!filename || !isAllowedMusicFile(filename)) {
-    return res.status(400).json({ error: 'Only .xml, .musicxml and .mxl files are allowed' });
+  const MAX_FILES = 10;
+  const uploaded = [];
+  let lastFilename = '';
+
+  for (const file of req.files) {
+    const filename = safeBasename(file.originalname);
+    if (!filename || !isAllowedMusicFile(filename)) {
+      return res.status(400).json({ error: `Only .xml, .musicxml and .mxl files are allowed` });
+    }
+
+    const targetPath = path.join(MUSIC_DIR, filename);
+    if (fs.existsSync(targetPath)) {
+      return res.status(409).json({ error: `File already exists: ${filename}. Use replace instead.` });
+    }
+
+    fs.writeFileSync(targetPath, file.buffer);
+    const stats = fs.statSync(targetPath);
+    const meta = parseMusicXmlMetadata(targetPath);
+
+    logAdminAction(req, 'sheet.upload', {
+      filename,
+      size: file.size,
+      sessionId: req.adminSessionId,
+    });
+
+    uploaded.push({
+      filename,
+      size: stats.size,
+      modified: stats.mtime,
+      ...meta,
+    });
+
+    lastFilename = filename;
   }
 
-  const targetPath = path.join(MUSIC_DIR, filename);
-  if (fs.existsSync(targetPath)) {
-    return res.status(409).json({ error: 'File already exists. Use replace instead.' });
-  }
-
-  fs.writeFileSync(targetPath, req.file.buffer);
-  const stats = fs.statSync(targetPath);
-  const meta = parseMusicXmlMetadata(targetPath);
-
-  logAdminAction(req, 'sheet.upload', {
-    filename,
-    size: req.file.size,
-    sessionId: req.adminSessionId,
-  });
-  return res.status(201).json({
-    filename,
-    size: stats.size,
-    modified: stats.mtime,
-    ...meta,
-  });
+  return res.status(201).json(uploaded);
 });
 
 app.put('/api/admin/files/:filename', requireAdmin, upload.single('file'), (req, res) => {

@@ -163,8 +163,8 @@ export default function AdminPanel({ selectedFile, onSelectFile, onLibraryChange
 	}
 
 	async function handleUpload() {
-		const file = uploadRef.current?.files?.[0];
-		if (!file) {
+		const files = uploadRef.current?.files;
+		if (!files || files.length === 0) {
 			setError('Choose a file to upload.');
 			return;
 		}
@@ -173,18 +173,23 @@ export default function AdminPanel({ selectedFile, onSelectFile, onLibraryChange
 		setError('');
 		setNotice('');
 		try {
-			const body = new FormData();
-			body.append('file', file);
+			const uploaded = [];
+			for (const file of Array.from(files)) {
+				const body = new FormData();
+				body.append('files', file);
 
-			const res = await apiFetch('/api/admin/files', { method: 'POST', body });
-			const data = await res.json();
-			if (!res.ok) throw new Error(data.error || 'Upload failed');
+				const res = await apiFetch('/api/admin/files', { method: 'POST', body });
+				const data = await res.json();
+				if (!res.ok) throw new Error(data.error || `Upload failed for ${file.name}`);
+				uploaded.push(data);
+			}
 
-			setNotice(`Uploaded ${data.filename}`);
+			setNotice(`Uploaded ${uploaded.length} file(s)`);
 			uploadRef.current.value = '';
 			await loadFiles();
-			setSelectedFilename(data.filename);
-			onSelectFile?.(data);
+			const nextFile = uploaded[uploaded.length - 1];
+			setSelectedFilename(nextFile.filename);
+			onSelectFile?.(nextFile);
 			onLibraryChanged?.();
 		} catch (err) {
 			setError(err.message);
@@ -414,8 +419,8 @@ export default function AdminPanel({ selectedFile, onSelectFile, onLibraryChange
 				<section className="admin-card">
 					<h3>Sheet Operations</h3>
 					<div className="admin-op-block">
-						<label htmlFor="admin-upload-file">Upload New Sheet</label>
-						<input id="admin-upload-file" ref={uploadRef} type="file" accept=".xml,.musicxml,.mxl" disabled={busy} />
+						<label htmlFor="admin-upload-file">Upload New Sheet(s)</label>
+						<input id="admin-upload-file" ref={uploadRef} type="file" accept=".xml,.musicxml,.mxl" multiple disabled={busy} />
 						<button type="button" className="btn btn-primary" onClick={handleUpload} disabled={busy}>
 							Upload
 						</button>

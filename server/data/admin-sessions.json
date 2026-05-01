@@ -6,6 +6,13 @@
       "updatedAt": 1777473488581,
       "expiresAt": 1778078288581,
       "rememberMe": true
+    },
+    "39e61aa57aca02c0e2657809": {
+      "tokenHash": "ebb06fffac4642143e88a70b0f8248b228fd3b6c31f04c41e533f9734afb9975",
+      "createdAt": 1777648993224,
+      "updatedAt": 1777648993224,
+      "expiresAt": 1778253793224,
+      "rememberMe": true
     }
   }
 }
