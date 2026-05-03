@@ -34,7 +34,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version || 'dev' }}
+            ghcr.io/${{ github.repository }}:latest
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.meta.outputs.version || 'dev' }}
