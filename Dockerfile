@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
+ARG VERSION=dev
 FROM node:20-alpine AS build
 
 WORKDIR /app
+
+ENV APP_VERSION=$VERSION
 
 COPY package.json ./
 COPY server/package.json ./server/
